@@ -196,7 +196,7 @@ jobs:
             -e EMAIL_TO="$EMAIL_TO" \
             -e RCA_DEBUG_INCIDENTS="true" \
             rca-monitor:latest \
-            python -m rca_assistant.cli
+            python -m rca_assistant.continuous_rca --once
 
       - name: Run continuous monitor for bounded time
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'demo' }}

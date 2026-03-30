@@ -92,12 +92,15 @@ def run_rca_once() -> None:
     if result.stderr:
         print(result.stderr)
 
-    if is_no_alert_result(result.stdout, result.stderr):
-        print("[continuous_rca] No alerts found for the detector in this polling cycle.")
-
     if result.returncode != 0:
         print(f"[continuous_rca] RCA command failed with exit code {result.returncode}")
         return
+
+    if is_no_alert_result(result.stdout, result.stderr):
+        print("[continuous_rca] No alerts found for the detector in this polling cycle. Skipping notification.")
+        return
+
+    print("[continuous_rca] Alert detected — sending notifications...")
 
     try:
         send_webex_message(format_notification(result.stdout))
@@ -117,6 +120,22 @@ def run_rca_once() -> None:
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Continuous RCA monitoring")
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Run a single RCA poll and exit (used by GitHub Actions monitor mode)",
+    )
+    args = parser.parse_args()
+
+    if args.once:
+        print("[continuous_rca] Running single-shot RCA poll...")
+        run_rca_once()
+        print("[continuous_rca] Single-shot poll complete.")
+        return
+
     print("[continuous_rca] Starting continuous RCA monitoring loop...")
     while True:
         run_rca_once()
