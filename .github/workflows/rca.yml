@@ -84,6 +84,23 @@ jobs:
             exit 1
           fi
 
+      - name: Preflight Splunk incidents API
+        run: |
+          set -euo pipefail
+          INCIDENTS_URL="${SPLUNK_API_URL}/v2/detector/${SPLUNK_DETECTOR_ID}/incidents?limit=1"
+          HTTP_CODE=$(curl -sS -o /tmp/splunk_incidents_preflight.json -w "%{http_code}" \
+            -H "Authorization: ${SPLUNK_AUTH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "$INCIDENTS_URL")
+          echo "Splunk incidents API preflight HTTP status: $HTTP_CODE"
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Preflight failed. Check SPLUNK_API_URL, SPLUNK_AUTH_TOKEN, and SPLUNK_DETECTOR_ID." 
+            echo "Response preview:"
+            head -c 400 /tmp/splunk_incidents_preflight.json || true
+            echo
+            exit 1
+          fi
+
       - name: Run scheduled live RCA against existing detector
         run: make live-rca
 
