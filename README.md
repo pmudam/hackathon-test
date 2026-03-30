@@ -56,7 +56,11 @@ Go to **GitHub → Settings → Secrets and variables → Actions → New reposi
 
 - `SPLUNK_API_URL`
 - `SPLUNK_AUTH_TOKEN`
-- `SPLUNK_DETECTOR_ID`
+
+Detector selection secrets:
+
+- `SPLUNK_DETECTOR_ID` (optional, preferred)
+- `SPLUNK_DETECTOR_NAME` (optional fallback; default used by workflow: `PIAM-PREVIEW:Test DynamoDB Read Capacity`)
 
 Optional notification secrets:
 
@@ -69,19 +73,22 @@ Optional notification secrets:
 - `EMAIL_FROM`
 - `EMAIL_TO`
 
-For workflow `mode=demo`, you do **not** need `SPLUNK_DETECTOR_ID` as a secret. It is resolved automatically from Terraform output after apply.
+Workflow detector auto-pick behavior:
+
+- `mode=demo`: detector ID is resolved automatically from Terraform output after apply
+- `mode=monitor`: uses `SPLUNK_DETECTOR_ID` if set, otherwise auto-resolves by `SPLUNK_DETECTOR_NAME`
 
 ### 2) Trigger workflow
 
 - Open **GitHub → Actions → RCA Monitor** and click **Run workflow**
-- Choose `mode=monitor` to run against existing detector id from GitHub secrets
+- Choose `mode=monitor` to run against an existing detector (auto-picks ID from secrets/name lookup)
 - Choose `mode=demo` to provision a detector, monitor briefly, and optionally keep/destroy resources
 - Scheduled runs apply only to `mode=monitor` behavior (every 5 minutes)
 
 ### 3) Recommended setup
 
 - **Provision once:** create the detector once and keep it alive with `make tf-apply` or with workflow `mode=demo` using `keep_resources=true`
-- **Monitor continuously:** let workflow `mode=monitor` poll Splunk every 5 minutes using the existing detector id from GitHub secret `SPLUNK_DETECTOR_ID`
+- **Monitor continuously:** let workflow `mode=monitor` poll Splunk every 5 minutes using auto-resolved detector ID
 - **Destroy manually:** run `make tf-destroy` only when you really want to stop alert monitoring
 
 ### 4) Notes for demo mode
@@ -94,8 +101,7 @@ For workflow `mode=demo`, you do **not** need `SPLUNK_DETECTOR_ID` as a secret. 
 ### 5) View output
 
 - Open the latest run logs under **Actions → RCA Monitor**
-- For `mode=monitor`, inspect job `run-live-rca`
-- For `mode=demo`, inspect job `demo-all-auto`
+- Inspect single job `rca` (same job for both monitor and demo modes)
 - If notification secrets are set, results are also posted to Webex and/or email
 
 ---
