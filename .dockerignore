@@ -1,0 +1,10 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.DS_Store
+infra/terraform/.terraform
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.backup

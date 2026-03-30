@@ -42,6 +42,42 @@ make live-rca
 
 ---
 
+## 🐳 Always-on monitoring (Docker)
+
+Use Docker Compose when you want near-continuous RCA polling outside GitHub schedule windows.
+
+### 1) Configure `.env`
+
+Ensure these values are set in `.env`:
+
+- `SPLUNK_API_URL`
+- `SPLUNK_AUTH_TOKEN`
+- `SPLUNK_DETECTOR_ID`
+- optional notifications: `WEBEX_BOT_TOKEN`, `WEBEX_ROOM_ID`, `SMTP_*`, `EMAIL_*`
+- optional polling: `RCA_POLL_INTERVAL` (seconds)
+
+### 2) Start monitor
+
+```bash
+docker compose up -d --build rca-monitor
+```
+
+### 3) View logs
+
+```bash
+docker compose logs -f rca-monitor
+```
+
+### 4) Stop monitor
+
+```bash
+docker compose down
+```
+
+This runs `python -m rca_assistant.continuous_rca` in a container with `restart: unless-stopped`.
+
+---
+
 ## 🤖 Run from GitHub Actions
 
 This repo uses a single workflow:

@@ -1,0 +1,13 @@
+services:
+  rca-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/src
+      RCA_POLL_INTERVAL: ${RCA_POLL_INTERVAL:-60}
+      SPLUNK_AUTH_TOKEN: ${SPLUNK_AUTH_TOKEN:-${SPLUNK_API_TOKEN:-}}
+    command: ["python", "-m", "rca_assistant.continuous_rca"]
+    restart: unless-stopped

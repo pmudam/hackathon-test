@@ -67,6 +67,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: rca-monitor:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Validate required settings
         run: |
           test -n "$SPLUNK_API_URL" || (echo "Missing secret: SPLUNK_API_URL" && exit 1)
@@ -168,7 +181,22 @@ jobs:
 
       - name: Run monitor mode RCA
         if: ${{ github.event_name == 'schedule' || github.event.inputs.mode != 'demo' }}
-        run: make live-rca
+        run: |
+          docker run --rm \
+            -e SPLUNK_API_URL="$SPLUNK_API_URL" \
+            -e SPLUNK_AUTH_TOKEN="$SPLUNK_AUTH_TOKEN" \
+            -e SPLUNK_DETECTOR_ID="$SPLUNK_DETECTOR_ID" \
+            -e WEBEX_BOT_TOKEN="$WEBEX_BOT_TOKEN" \
+            -e WEBEX_ROOM_ID="$WEBEX_ROOM_ID" \
+            -e SMTP_SERVER="$SMTP_SERVER" \
+            -e SMTP_PORT="$SMTP_PORT" \
+            -e SMTP_USER="$SMTP_USER" \
+            -e SMTP_PASSWORD="$SMTP_PASSWORD" \
+            -e EMAIL_FROM="$EMAIL_FROM" \
+            -e EMAIL_TO="$EMAIL_TO" \
+            -e RCA_DEBUG_INCIDENTS="true" \
+            rca-monitor:latest \
+            python -m rca_assistant.cli
 
       - name: Run continuous monitor for bounded time
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'demo' }}
@@ -185,7 +213,21 @@ jobs:
           DURATION_SECONDS=$((EFFECTIVE_MINUTES * 60))
           START_TS=$(date +%s)
           set +e
-          timeout "${DURATION_SECONDS}s" make continuous-rca
+          timeout "${DURATION_SECONDS}s" docker run --rm \
+            -e SPLUNK_API_URL="$SPLUNK_API_URL" \
+            -e SPLUNK_AUTH_TOKEN="$SPLUNK_AUTH_TOKEN" \
+            -e SPLUNK_DETECTOR_ID="$SPLUNK_DETECTOR_ID" \
+            -e WEBEX_BOT_TOKEN="$WEBEX_BOT_TOKEN" \
+            -e WEBEX_ROOM_ID="$WEBEX_ROOM_ID" \
+            -e SMTP_SERVER="$SMTP_SERVER" \
+            -e SMTP_PORT="$SMTP_PORT" \
+            -e SMTP_USER="$SMTP_USER" \
+            -e SMTP_PASSWORD="$SMTP_PASSWORD" \
+            -e EMAIL_FROM="$EMAIL_FROM" \
+            -e EMAIL_TO="$EMAIL_TO" \
+            -e RCA_DEBUG_INCIDENTS="true" \
+            -e RCA_POLL_INTERVAL="${RCA_POLL_INTERVAL:-120}" \
+            rca-monitor:latest
           status=$?
           set -e
           END_TS=$(date +%s)
