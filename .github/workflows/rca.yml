@@ -139,7 +139,8 @@ jobs:
           set -euo pipefail
           INCIDENTS_URL="${SPLUNK_API_URL}/v2/detector/${SPLUNK_DETECTOR_ID}/incidents?limit=1"
           HTTP_CODE=$(curl -sS -o /tmp/splunk_incidents_preflight.json -w "%{http_code}" \
-            -H "Authorization: ${SPLUNK_AUTH_TOKEN}" \
+            -H "X-SF-TOKEN: ${SPLUNK_AUTH_TOKEN}" \
+            -H "Authorization: Bearer ${SPLUNK_AUTH_TOKEN}" \
             -H "Content-Type: application/json" \
             "$INCIDENTS_URL")
           echo "Splunk incidents API preflight HTTP status: $HTTP_CODE"
