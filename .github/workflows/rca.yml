@@ -27,6 +27,7 @@ jobs:
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
       EMAIL_TO: ${{ secrets.EMAIL_TO }}
+      RCA_DEBUG_INCIDENTS: "true"
       PYTHONPATH: src
     steps:
       - name: Checkout repository

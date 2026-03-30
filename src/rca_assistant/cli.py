@@ -13,6 +13,18 @@ from .engine import RootCauseEngine
 from .splunk_client import SplunkObservabilityClient, incidents_to_alerts
 
 
+def debug_incident_logging_enabled(value: str | None = None) -> bool:
+    raw_value = value if value is not None else os.getenv("RCA_DEBUG_INCIDENTS", "")
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def emit_live_incident_debug(detector_id: str, incidents: list[dict], alerts: list[dict]) -> None:
+    print(
+        f"[rca_cli] Detector {detector_id} returned {len(incidents)} incident(s); normalized into {len(alerts)} alert(s).",
+        file=sys.stderr,
+    )
+
+
 def _load_alert_file(path: Path) -> list[dict]:
     if not path.exists():
         raise FileNotFoundError(f"Alert file not found: {path}")
@@ -98,13 +110,14 @@ def main() -> None:
             endpoint_template=args.splunk_incidents_endpoint,
             limit=args.splunk_live_limit,
         )
-        splunk_alerts.extend(
-            incidents_to_alerts(
-                incidents,
-                service_fallback=args.dashboard_service,
-                detector_name_fallback=splunk_detector_id,
-            )
+        live_alerts = incidents_to_alerts(
+            incidents,
+            service_fallback=args.dashboard_service,
+            detector_name_fallback=splunk_detector_id,
         )
+        if debug_incident_logging_enabled():
+            emit_live_incident_debug(splunk_detector_id, incidents, live_alerts)
+        splunk_alerts.extend(live_alerts)
 
     if not args.skip_dashboard_input and args.dashboard_dsl and args.dashboard_values:
         dsl_text = _load_text_file(Path(args.dashboard_dsl))
