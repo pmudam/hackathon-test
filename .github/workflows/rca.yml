@@ -284,9 +284,9 @@ jobs:
         if: ${{ github.event_name == 'schedule' || github.event.inputs.action == 'monitor-only' }}
         run: |
           set -euo pipefail
-          # Polls Splunk detector every 1 second for ~6 hours per job.
+          # Polls Splunk detector every 120 seconds for ~6 hours per job.
           # Scheduled runs restart automatically every 24 hours at midnight UTC — seamless 24/7 monitoring.
-          echo "Starting RCA monitor — polling every 1s for ~6 hours..."
+          echo "Starting RCA monitor — polling every 120s for ~6 hours..."
           set +e
           timeout 21600s docker run --rm \
             -e SPLUNK_API_URL="$SPLUNK_API_URL" \
@@ -301,7 +301,7 @@ jobs:
             -e EMAIL_FROM="$EMAIL_FROM" \
             -e EMAIL_TO="$EMAIL_TO" \
             -e RCA_DEBUG_INCIDENTS="$RCA_DEBUG_INCIDENTS" \
-            -e RCA_POLL_INTERVAL="1" \
+            -e RCA_POLL_INTERVAL="120" \
             rca-monitor:latest
           status=$?
           set -e
