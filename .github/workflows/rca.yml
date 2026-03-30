@@ -23,7 +23,7 @@ on:
         required: false
         default: "false"
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "0 * * * *"
 
 permissions:
   contents: read
@@ -31,7 +31,7 @@ permissions:
 jobs:
   rca:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 65
     env:
       SPLUNK_API_URL: ${{ secrets.SPLUNK_API_URL }}
       SPLUNK_AUTH_TOKEN: ${{ secrets.SPLUNK_AUTH_TOKEN }}
@@ -179,10 +179,15 @@ jobs:
             exit 1
           fi
 
-      - name: Run monitor mode RCA
+      - name: Run continuous monitor (55 min window)
         if: ${{ github.event_name == 'schedule' || github.event.inputs.mode != 'demo' }}
         run: |
-          docker run --rm \
+          set -euo pipefail
+          # Run container for 55 minutes polling every 60s (~55 polls per job).
+          # The cron schedule restarts this job every hour, creating a seamless loop.
+          echo "Starting continuous RCA monitor — running for 55 minutes (poll every 60s)..."
+          set +e
+          timeout 3300s docker run --rm \
             -e SPLUNK_API_URL="$SPLUNK_API_URL" \
             -e SPLUNK_AUTH_TOKEN="$SPLUNK_AUTH_TOKEN" \
             -e SPLUNK_DETECTOR_ID="$SPLUNK_DETECTOR_ID" \
@@ -195,8 +200,18 @@ jobs:
             -e EMAIL_FROM="$EMAIL_FROM" \
             -e EMAIL_TO="$EMAIL_TO" \
             -e RCA_DEBUG_INCIDENTS="true" \
-            rca-monitor:latest \
-            python -m rca_assistant.continuous_rca --once
+            -e RCA_POLL_INTERVAL="60" \
+            rca-monitor:latest
+          status=$?
+          set -e
+          if [ "$status" -eq 124 ]; then
+            echo "55-minute monitoring window complete. Next run starts automatically via cron."
+            exit 0
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "Container exited with error code $status"
+            exit "$status"
+          fi
 
       - name: Run continuous monitor for bounded time
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'demo' }}
