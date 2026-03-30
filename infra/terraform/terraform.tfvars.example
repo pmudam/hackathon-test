@@ -1,0 +1,6 @@
+environment           = "PIAM-PREVIEW"
+environment_prefix    = "dev"
+splunk_api_url        = "https://api.us1.signalfx.com"
+splunk_auth_token     = "your_splunk_auth_token"
+dynamodb_table_prefix = "staging"
+rca_service_name      = "piam-preview-dynamodb"

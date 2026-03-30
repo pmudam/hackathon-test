@@ -1,0 +1,28 @@
+[
+  {
+    "id": "sp-2001",
+    "timestamp": "2026-03-23T10:18:00Z",
+    "service": "payments-api",
+    "severity": "high",
+    "category": "application",
+    "title": "Memory leak warning",
+    "message": "Heap growth anomaly detected; possible memory leak in request handler",
+    "metadata": {
+      "host": "payments-api-12",
+      "index": "prod-logs"
+    }
+  },
+  {
+    "id": "sp-2002",
+    "timestamp": "2026-03-23T10:28:00Z",
+    "service": "payments-api",
+    "severity": "critical",
+    "category": "api",
+    "title": "API 5xx surge",
+    "message": "5xx error rate exceeded 12% and p95 latency crossed 2.5s",
+    "metadata": {
+      "endpoint": "/v1/payments",
+      "index": "prod-logs"
+    }
+  }
+]

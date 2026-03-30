@@ -1,0 +1,27 @@
+[
+  {
+    "id": "inc-1001",
+    "detectorName": "PIAM-PREVIEW:High DynamoDB Read Capacity",
+    "severity": "Critical",
+    "status": "open",
+    "lastTriggeredTime": 1774254000000,
+    "summary": "DynamoDB read capacity reached 97% for staging table",
+    "description": "Detector observed sustained read capacity utilization above critical threshold.",
+    "dimensions": {
+      "service": "piam-preview-dynamodb",
+      "TableName": "staging-prometheus-orders"
+    }
+  },
+  {
+    "id": "inc-1002",
+    "detectorName": "PIAM-PREVIEW:High DynamoDB Read Capacity",
+    "severity": "Warning",
+    "status": "open",
+    "lastTriggeredTime": "2026-03-23T11:05:00Z",
+    "summary": "DynamoDB read capacity reached 92%",
+    "description": "Read capacity above warning threshold.",
+    "dimensions": {
+      "service": "piam-preview-dynamodb"
+    }
+  }
+]
