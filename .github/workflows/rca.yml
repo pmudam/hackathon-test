@@ -1,5 +1,8 @@
 name: RCA Scheduled Monitor
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   workflow_dispatch:
   schedule:
@@ -44,6 +47,23 @@ jobs:
           test -n "$SPLUNK_API_URL" || (echo "Missing secret: SPLUNK_API_URL" && exit 1)
           test -n "$SPLUNK_AUTH_TOKEN" || (echo "Missing secret: SPLUNK_AUTH_TOKEN" && exit 1)
           test -n "$SPLUNK_DETECTOR_ID" || (echo "Missing secret: SPLUNK_DETECTOR_ID" && exit 1)
+
+      - name: Preflight detector configuration
+        run: |
+          set -euo pipefail
+          DETECTOR_LEN=${#SPLUNK_DETECTOR_ID}
+          TOKEN_LEN=${#SPLUNK_AUTH_TOKEN}
+          echo "Using Splunk API URL: $SPLUNK_API_URL"
+          echo "Detector ID length: $DETECTOR_LEN"
+          echo "Auth token length: $TOKEN_LEN"
+          if [ "$DETECTOR_LEN" -lt 6 ]; then
+            echo "SPLUNK_DETECTOR_ID looks too short; check the GitHub secret value."
+            exit 1
+          fi
+          if [ "$TOKEN_LEN" -lt 10 ]; then
+            echo "SPLUNK_AUTH_TOKEN looks too short; check the GitHub secret value."
+            exit 1
+          fi
 
       - name: Run scheduled live RCA against existing detector
         run: make live-rca

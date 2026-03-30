@@ -32,10 +32,32 @@ def resolve_poll_interval(value: str | None = None) -> int:
 POLL_INTERVAL = resolve_poll_interval()
 
 
-def format_notification(rca_output: str) -> str:
+def parse_finding(rca_output: str) -> dict | None:
     try:
-        finding = json.loads(rca_output)
+        parsed = json.loads(rca_output)
     except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def is_no_alert_result(rca_output: str, stderr_output: str = "") -> bool:
+    stderr_normalized = stderr_output.lower()
+    if "no live incidents found" in stderr_normalized:
+        return True
+
+    finding = parse_finding(rca_output)
+    if not finding:
+        return False
+
+    probable_root_cause = str(finding.get("probable_root_cause", "")).lower()
+    explanation = str(finding.get("explanation", "")).lower()
+
+    return "insufficient data" in probable_root_cause or "no live incidents found" in explanation
+
+
+def format_notification(rca_output: str) -> str:
+    finding = parse_finding(rca_output)
+    if not finding:
         return f"**Splunk RCA Update**\n\n```\n{rca_output.strip()}\n```"
 
     evidence = "\n".join(f"- {item}" for item in finding.get("evidence", [])) or "- No evidence captured"
@@ -69,6 +91,9 @@ def run_rca_once() -> None:
         print(result.stdout)
     if result.stderr:
         print(result.stderr)
+
+    if is_no_alert_result(result.stdout, result.stderr):
+        print("[continuous_rca] No alerts found for the detector in this polling cycle.")
 
     if result.returncode != 0:
         print(f"[continuous_rca] RCA command failed with exit code {result.returncode}")
