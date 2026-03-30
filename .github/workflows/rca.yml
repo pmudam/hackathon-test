@@ -100,32 +100,46 @@ jobs:
       - name: Get detector ID after creation or find existing
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'create-and-monitor' }}
         run: |
+          echo "Checking for detector ID..."
+          
           if [ "${{ steps.check_splunk_detector.outputs.exists }}" = "true" ]; then
             # Detector already exists — use ID from check step
             DETECTOR_ID="${{ steps.check_splunk_detector.outputs.id }}"
             echo "Using existing detector: $DETECTOR_ID"
           else
             # Detector was just created — get from Terraform
+            echo "Reading detector ID from Terraform..."
             cd infra/terraform
-            DETECTOR_ID=$(terraform output -raw splunk_detector_id 2>/dev/null || echo "")
+            
+            # Debug: Show terraform state
+            ls -la terraform.tfstate* 2>/dev/null || echo "No terraform state found"
+            
+            DETECTOR_ID=$(terraform output -raw splunk_detector_id 2>&1 || echo "")
             if [ -z "$DETECTOR_ID" ]; then
               echo "ERROR: Could not get detector ID from Terraform"
+              echo "Terraform output:"
+              terraform output 2>&1 || true
               exit 1
             fi
             echo "Using newly created detector: $DETECTOR_ID"
+            cd - > /dev/null
           fi
           
           echo "SPLUNK_DETECTOR_ID=$DETECTOR_ID" >> "$GITHUB_ENV"
           # Save detector ID to repo for future runs
           echo "$DETECTOR_ID" > .detector-id
-          echo "Saved detector ID: $DETECTOR_ID"
+          echo "Saved detector ID to .detector-id: $DETECTOR_ID"
+          cat .detector-id
 
       - name: Commit detector ID to repo
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'create-and-monitor' }}
         run: |
+          echo "Current directory: $PWD"
+          ls -la .detector-id || echo "ERROR: .detector-id file not found!"
+          
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add .detector-id
+          git add .detector-id || echo "WARNING: Could not add .detector-id"
           git commit -m "Save detector ID: $SPLUNK_DETECTOR_ID" || echo "Nothing to commit"
           git push || echo "Push failed (might already be up to date)"
 
