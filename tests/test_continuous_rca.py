@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from rca_assistant.continuous_rca import format_notification, is_no_alert_result, resolve_poll_interval
+from rca_assistant.continuous_rca import format_notification, idle_logging_enabled, is_no_alert_result, resolve_poll_interval
 
 
 class ContinuousRcaTests(unittest.TestCase):
@@ -41,6 +41,14 @@ class ContinuousRcaTests(unittest.TestCase):
 
     def test_resolve_poll_interval_accepts_positive_integer(self):
         self.assertEqual(resolve_poll_interval("15"), 15)
+
+    def test_idle_logging_enabled_false_by_default(self):
+        self.assertFalse(idle_logging_enabled(""))
+        self.assertFalse(idle_logging_enabled("false"))
+
+    def test_idle_logging_enabled_true_values(self):
+        self.assertTrue(idle_logging_enabled("true"))
+        self.assertTrue(idle_logging_enabled("1"))
 
     def test_is_no_alert_result_detects_stderr_message(self):
         self.assertTrue(is_no_alert_result("{}", "No live incidents found for the selected detector."))

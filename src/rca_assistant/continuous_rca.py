@@ -32,6 +32,11 @@ def resolve_poll_interval(value: str | None = None) -> int:
 POLL_INTERVAL = resolve_poll_interval()
 
 
+def idle_logging_enabled(value: str | None = None) -> bool:
+    raw_value = value if value is not None else os.getenv("RCA_VERBOSE_IDLE", "")
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def parse_finding(rca_output: str) -> dict | None:
     try:
         parsed = json.loads(rca_output)
@@ -84,21 +89,28 @@ def run_rca_once() -> None:
         "--skip-dashboard-input",
         "--json",
     ]
-    print("\n[continuous_rca] Running RCA analysis...")
     result = subprocess.run(command, env=env, capture_output=True, text=True)
 
-    if result.stdout:
-        print(result.stdout)
-    if result.stderr:
-        print(result.stderr)
-
     if result.returncode != 0:
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr)
         print(f"[continuous_rca] RCA command failed with exit code {result.returncode}")
         return
 
     if is_no_alert_result(result.stdout, result.stderr):
-        print("[continuous_rca] No alerts found for the detector in this polling cycle. Skipping notification.")
+        if idle_logging_enabled():
+            if result.stderr:
+                print(result.stderr)
+            print("[continuous_rca] No alerts found for the detector in this polling cycle.")
         return
+
+    print("\n[continuous_rca] Incident detected. Running RCA analysis...")
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
 
     print("[continuous_rca] Alert detected — sending notifications...")
 
@@ -139,7 +151,8 @@ def main() -> None:
     print("[continuous_rca] Starting continuous RCA monitoring loop...")
     while True:
         run_rca_once()
-        print(f"[continuous_rca] Sleeping for {POLL_INTERVAL} seconds...")
+        if idle_logging_enabled():
+            print(f"[continuous_rca] Sleeping for {POLL_INTERVAL} seconds...")
         time.sleep(POLL_INTERVAL)
 
 
