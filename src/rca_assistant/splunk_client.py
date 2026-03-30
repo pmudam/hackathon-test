@@ -8,6 +8,9 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
+MIN_INCIDENT_AGE_SECONDS = 120
+
+
 class SplunkObservabilityClient:
     def __init__(self, api_url: str, auth_token: str, timeout_seconds: int = 20) -> None:
         if not api_url.strip():
@@ -77,8 +80,12 @@ def incidents_to_alerts(
     detector_name_fallback: str = "splunk-detector",
 ) -> list[dict[str, Any]]:
     alerts: list[dict[str, Any]] = []
+    current_time = datetime.now(timezone.utc)
 
     for item in incidents:
+        if not _incident_has_matured(item, now=current_time):
+            continue
+
         incident_id = str(item.get("id") or item.get("incidentId") or item.get("key") or "incident-unknown")
         severity = _normalize_severity(str(item.get("severity", "info")))
         timestamp = _normalize_timestamp(
@@ -119,6 +126,27 @@ def incidents_to_alerts(
         )
 
     return alerts
+
+
+def _incident_has_matured(item: dict[str, Any], now: datetime, minimum_age_seconds: int = MIN_INCIDENT_AGE_SECONDS) -> bool:
+    raw_timestamp = (
+        item.get("timestamp")
+        or item.get("lastTriggeredTime")
+        or item.get("eventTimestamp")
+        or item.get("triggerTime")
+    )
+
+    if raw_timestamp is None:
+        return True
+
+    normalized = _normalize_timestamp(raw_timestamp)
+    try:
+        triggered_at = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+
+    age_seconds = (now - triggered_at).total_seconds()
+    return age_seconds >= minimum_age_seconds
 
 
 def _normalize_severity(value: str) -> str:
