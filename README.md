@@ -44,10 +44,11 @@ make live-rca
 
 ## 🤖 Run from GitHub Actions
 
-This repo includes two workflows:
+This repo uses a single workflow:
 
-- `.github/workflows/rca.yml` for scheduled RCA polling against an existing detector (manual + every 5 minutes)
-- `.github/workflows/rca-all-auto.yml` for bounded demo runs: provision + short monitor window + optional destroy
+- `.github/workflows/rca.yml` with two modes:
+	- `monitor`: scheduled RCA polling against an existing detector (manual + every 5 minutes)
+	- `demo`: bounded Terraform provision + short monitor window + optional destroy
 
 ### 1) Add repository secrets
 
@@ -68,30 +69,33 @@ Optional notification secrets:
 - `EMAIL_FROM`
 - `EMAIL_TO`
 
-For `RCA Demo All Auto (Terraform)`, you do **not** need `SPLUNK_DETECTOR_ID` as a secret. It is resolved automatically from Terraform output after apply.
+For workflow `mode=demo`, you do **not** need `SPLUNK_DETECTOR_ID` as a secret. It is resolved automatically from Terraform output after apply.
 
-### 2) Trigger workflows
+### 2) Trigger workflow
 
-- **Scheduled monitor:** Open **GitHub → Actions → RCA Scheduled Monitor** and click **Run workflow**
-- **Demo workflow:** Open **GitHub → Actions → RCA Demo All Auto (Terraform)** and click **Run workflow**
-- Scheduled runs apply only to `RCA Scheduled Monitor` (every 5 minutes)
+- Open **GitHub → Actions → RCA Monitor** and click **Run workflow**
+- Choose `mode=monitor` to run against existing detector id from GitHub secrets
+- Choose `mode=demo` to provision a detector, monitor briefly, and optionally keep/destroy resources
+- Scheduled runs apply only to `mode=monitor` behavior (every 5 minutes)
 
 ### 3) Recommended setup
 
-- **Provision once:** create the detector once and keep it alive with `make tf-apply` or with the demo workflow using `keep_resources=true`
-- **Monitor continuously:** let `RCA Scheduled Monitor` poll Splunk every 5 minutes using the existing detector id from GitHub secret `SPLUNK_DETECTOR_ID`
+- **Provision once:** create the detector once and keep it alive with `make tf-apply` or with workflow `mode=demo` using `keep_resources=true`
+- **Monitor continuously:** let workflow `mode=monitor` poll Splunk every 5 minutes using the existing detector id from GitHub secret `SPLUNK_DETECTOR_ID`
 - **Destroy manually:** run `make tf-destroy` only when you really want to stop alert monitoring
 
-### 4) Notes for demo workflow
+### 4) Notes for demo mode
 
-- `RCA Demo All Auto (Terraform)` provisions a detector, auto-fetches detector ID, and runs `make continuous-rca` for a bounded time
+- Workflow `mode=demo` provisions a detector, auto-fetches detector ID, and runs `make continuous-rca` for a bounded time
 - You can set `monitor_minutes` when launching the workflow (default: 2, minimum enforced: 2)
 - You can set `keep_resources=true` to skip destroy for debugging
-- Optional secret: `RCA_POLL_INTERVAL` (defaults to `120` seconds in this workflow if unset)
+- Optional secret: `RCA_POLL_INTERVAL` (defaults to `120` seconds in demo mode if unset)
 
 ### 5) View output
 
-- Open the latest run logs under **Actions → RCA Scheduled Monitor → run-live-rca**
+- Open the latest run logs under **Actions → RCA Monitor**
+- For `mode=monitor`, inspect job `run-live-rca`
+- For `mode=demo`, inspect job `demo-all-auto`
 - If notification secrets are set, results are also posted to Webex and/or email
 
 ---
