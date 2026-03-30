@@ -6,22 +6,14 @@ env:
 on:
   workflow_dispatch:
     inputs:
-      mode:
-        description: "Workflow mode"
+      action:
+        description: "Action to perform"
         required: false
-        default: "monitor"
+        default: "create-and-monitor"
         type: choice
         options:
-          - monitor
-          - demo
-      monitor_minutes:
-        description: "How long demo mode should run continuous monitoring before stopping"
-        required: false
-        default: "2"
-      keep_resources:
-        description: "Keep Terraform resources after demo mode (true/false)"
-        required: false
-        default: "false"
+          - create-and-monitor
+          - monitor-only
   schedule:
     - cron: "0 * * * *"
 
@@ -36,7 +28,6 @@ jobs:
       SPLUNK_API_URL: ${{ secrets.SPLUNK_API_URL }}
       SPLUNK_AUTH_TOKEN: ${{ secrets.SPLUNK_AUTH_TOKEN }}
       SPLUNK_DETECTOR_ID: ${{ secrets.SPLUNK_DETECTOR_ID }}
-      SPLUNK_DETECTOR_NAME: ${{ secrets.SPLUNK_DETECTOR_NAME }}
       WEBEX_BOT_TOKEN: ${{ secrets.WEBEX_BOT_TOKEN }}
       WEBEX_ROOM_ID: ${{ secrets.WEBEX_ROOM_ID }}
       SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
@@ -47,25 +38,60 @@ jobs:
       EMAIL_TO: ${{ secrets.EMAIL_TO }}
       RCA_DEBUG_INCIDENTS: "true"
       PYTHONPATH: src
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'create-and-monitor' }}
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Set up Terraform (demo mode)
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'demo' }}
+      - name: Set up Terraform
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'create-and-monitor' }}
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
 
-      - name: Install project
+      - name: Install project dependencies
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'create-and-monitor' }}
         run: |
           python -m pip install --upgrade pip
           pip install -e .
+
+      - name: Terraform init
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'create-and-monitor' }}
+        run: make tf-init
+
+      - name: Create Splunk detector via Terraform
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'create-and-monitor' }}
+        run: make tf-apply
+
+      - name: Extract detector ID from Terraform
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'create-and-monitor' }}
+        run: |
+          DETECTOR_ID=$(cd infra/terraform && terraform output -raw splunk_detector_id)
+          echo "SPLUNK_DETECTOR_ID=$DETECTOR_ID" >> "$GITHUB_ENV"
+          echo "detector_id=$DETECTOR_ID" >> "$GITHUB_OUTPUT"
+          {
+            echo "## ✅ Detector Created"
+            echo ""
+            echo "**Detector ID:** \`$DETECTOR_ID\`"
+            echo ""
+            echo "### Next steps:"
+            echo "1. Go to repo **Settings → Secrets and variables → Actions**"
+            echo "2. Create/update secret **SPLUNK_DETECTOR_ID** with value: \`$DETECTOR_ID\`"
+            echo "3. After that, scheduled monitoring starts automatically every hour"
+          } >> "$GITHUB_STEP_SUMMARY"
+        id: detector
+
+      - name: Start monitoring the created detector
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'create-and-monitor' }}
+        run: |
+          echo "Detector created. Starting monitoring..."
+          echo "SPLUNK_DETECTOR_ID=${{ env.SPLUNK_DETECTOR_ID }}" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -80,112 +106,67 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Validate required settings
+      - name: Validate required secrets
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.action == 'monitor-only' }}
         run: |
-          test -n "$SPLUNK_API_URL" || (echo "Missing secret: SPLUNK_API_URL" && exit 1)
-          test -n "$SPLUNK_AUTH_TOKEN" || (echo "Missing secret: SPLUNK_AUTH_TOKEN" && exit 1)
+          test -n "$SPLUNK_API_URL"     || (echo "ERROR: Missing secret SPLUNK_API_URL"     && exit 1)
+          test -n "$SPLUNK_AUTH_TOKEN"  || (echo "ERROR: Missing secret SPLUNK_AUTH_TOKEN"  && exit 1)
+          # SPLUNK_DETECTOR_ID can be missing — we'll auto-resolve it below
 
-      - name: Terraform init (demo mode)
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'demo' }}
-        run: make tf-init
-
-      - name: Terraform apply (demo mode)
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'demo' }}
-        run: make tf-apply
-
-      - name: Resolve detector ID automatically
+      - name: Auto-resolve detector ID (if not set in secret)
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.action == 'monitor-only' }}
         run: |
           set -euo pipefail
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.mode }}" = "demo" ]; then
-            DETECTOR_ID="$(cd infra/terraform && terraform output -raw splunk_detector_id)"
-            test -n "$DETECTOR_ID" || (echo "No detector ID from Terraform output" && exit 1)
-            echo "SPLUNK_DETECTOR_ID=$DETECTOR_ID" >> "$GITHUB_ENV"
-            echo "DETECTOR_RESOLUTION_SOURCE=terraform-output" >> "$GITHUB_ENV"
-            echo "Resolved detector ID from demo apply: $DETECTOR_ID"
-          elif [ -n "${SPLUNK_DETECTOR_ID:-}" ]; then
-            echo "DETECTOR_RESOLUTION_SOURCE=secret-splunk-detector-id" >> "$GITHUB_ENV"
-            echo "Using detector ID from GitHub secret SPLUNK_DETECTOR_ID."
-          else
-            DEFAULT_DETECTOR_NAME="PIAM-PREVIEW:Test DynamoDB Read Capacity"
-            DETECTOR_NAME="${SPLUNK_DETECTOR_NAME:-$DEFAULT_DETECTOR_NAME}"
-            echo "SPLUNK_DETECTOR_ID not set; searching detector by name: $DETECTOR_NAME"
-            DETECTOR_ID=$(curl -sS \
-              -H "Authorization: ${SPLUNK_AUTH_TOKEN}" \
-              -H "Content-Type: application/json" \
-              "${SPLUNK_API_URL}/v2/detector?limit=1000" | \
-              python3 -c 'import json, os, sys; name=os.environ.get("SPLUNK_DETECTOR_NAME", "PIAM-PREVIEW:Test DynamoDB Read Capacity"); data=json.load(sys.stdin); print(next((d.get("id", "") for d in data.get("results", []) if d.get("name") == name), ""))')
-            test -n "$DETECTOR_ID" || (echo "Unable to auto-resolve detector ID. Set SPLUNK_DETECTOR_ID or SPLUNK_DETECTOR_NAME secret." && exit 1)
-            echo "SPLUNK_DETECTOR_ID=$DETECTOR_ID" >> "$GITHUB_ENV"
-            echo "DETECTOR_RESOLUTION_SOURCE=name-lookup" >> "$GITHUB_ENV"
-            echo "Auto-resolved detector ID by name: $DETECTOR_ID"
+          if [ -n "${SPLUNK_DETECTOR_ID:-}" ]; then
+            echo "Using detector from secret: $SPLUNK_DETECTOR_ID"
+            exit 0
           fi
-
-      - name: Detector resolution summary
-        run: |
-          {
-            echo "### Detector resolution"
-            echo
-            echo "- Source: ${DETECTOR_RESOLUTION_SOURCE:-unknown}"
-            echo "- Detector ID: $SPLUNK_DETECTOR_ID"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Preflight detector configuration
-        run: |
-          set -euo pipefail
-          DETECTOR_LEN=${#SPLUNK_DETECTOR_ID}
-          TOKEN_LEN=${#SPLUNK_AUTH_TOKEN}
-          echo "Using Splunk API URL: $SPLUNK_API_URL"
-          echo "Detector ID length: $DETECTOR_LEN"
-          echo "Auth token length: $TOKEN_LEN"
-          if [ "$DETECTOR_LEN" -lt 6 ]; then
-            echo "SPLUNK_DETECTOR_ID looks too short; check the GitHub secret value."
-            exit 1
+          
+          # Detector ID not in secret — try to find it by Terraform output
+          if [ -f "infra/terraform/terraform.tfstate" ]; then
+            DETECTOR_ID=$(cd infra/terraform && terraform output -raw splunk_detector_id 2>/dev/null || echo "")
+            if [ -n "$DETECTOR_ID" ]; then
+              echo "SPLUNK_DETECTOR_ID=$DETECTOR_ID" >> "$GITHUB_ENV"
+              echo "Auto-resolved detector from Terraform state: $DETECTOR_ID"
+              exit 0
+            fi
           fi
-          if [ "$TOKEN_LEN" -lt 10 ]; then
-            echo "SPLUNK_AUTH_TOKEN looks too short; check the GitHub secret value."
-            exit 1
-          fi
+          
+          # Still no detector — fail with clear instructions
+          echo "ERROR: SPLUNK_DETECTOR_ID not in GitHub secrets and no Terraform state found."
+          echo "Solution: Run workflow with action=create-and-monitor to create and set detector."
+          exit 1
 
-      - name: Preflight Splunk incidents API
+      - name: Preflight — check Splunk API connectivity
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.action == 'monitor-only' }}
         run: |
           set -euo pipefail
           INCIDENTS_URL="${SPLUNK_API_URL}/v2/detector/${SPLUNK_DETECTOR_ID}/incidents?limit=1"
-          HTTP_CODE=$(curl -sS -o /tmp/splunk_incidents_preflight.json -w "%{http_code}" \
+          HTTP_CODE=$(curl -sS -o /tmp/splunk_preflight.json -w "%{http_code}" \
             -H "X-SF-TOKEN: ${SPLUNK_AUTH_TOKEN}" \
             -H "Authorization: Bearer ${SPLUNK_AUTH_TOKEN}" \
             -H "Content-Type: application/json" \
             "$INCIDENTS_URL")
-          echo "Splunk incidents API preflight HTTP status: $HTTP_CODE"
+          echo "Splunk API preflight status: $HTTP_CODE"
           if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Preflight failed. Check SPLUNK_API_URL, SPLUNK_AUTH_TOKEN, and SPLUNK_DETECTOR_ID." 
             case "$HTTP_CODE" in
-              401)
-                echo "Hint: 401 Unauthorized usually means token is invalid/expired, has whitespace, or belongs to a different Splunk realm."
-                ;;
-              403)
-                echo "Hint: 403 Forbidden usually means token lacks permission to read this detector."
-                ;;
-              404)
-                echo "Hint: 404 Not Found usually means detector ID is wrong or does not exist in this organization."
-                ;;
-              *)
-                echo "Hint: Unexpected status from Splunk incidents endpoint; check Splunk service status and endpoint correctness."
-                ;;
+              401) echo "Hint: 401 — token invalid/expired. Rotate SPLUNK_AUTH_TOKEN secret." ;;
+              403) echo "Hint: 403 — token lacks permission to read this detector." ;;
+              404) echo "Hint: 404 — detector not found. Check SPLUNK_DETECTOR_ID secret." ;;
+              *)   echo "Hint: Unexpected status. Check Splunk service status." ;;
             esac
-            echo "Response preview:"
-            head -c 400 /tmp/splunk_incidents_preflight.json || true
-            echo
+            head -c 400 /tmp/splunk_preflight.json || true
             exit 1
           fi
+          echo "Splunk API reachable. Monitoring detector: $SPLUNK_DETECTOR_ID"
 
-      - name: Run continuous monitor (55 min window)
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.mode != 'demo' }}
+      - name: Run continuous RCA monitor (55 min)
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.action == 'monitor-only' }}
         run: |
           set -euo pipefail
-          # Run container for 55 minutes polling every 60s (~55 polls per job).
-          # The cron schedule restarts this job every hour, creating a seamless loop.
-          echo "Starting continuous RCA monitor — running for 55 minutes (poll every 60s)..."
+          # Polls Splunk detector every 60s for 55 minutes (~55 polls per job).
+          # Scheduled runs restart automatically every hour — seamless 24/7 monitoring.
+          echo "Starting RCA monitor — polling every 60s for 55 minutes..."
           set +e
           timeout 3300s docker run --rm \
             -e SPLUNK_API_URL="$SPLUNK_API_URL" \
@@ -199,85 +180,16 @@ jobs:
             -e SMTP_PASSWORD="$SMTP_PASSWORD" \
             -e EMAIL_FROM="$EMAIL_FROM" \
             -e EMAIL_TO="$EMAIL_TO" \
-            -e RCA_DEBUG_INCIDENTS="true" \
+            -e RCA_DEBUG_INCIDENTS="$RCA_DEBUG_INCIDENTS" \
             -e RCA_POLL_INTERVAL="60" \
             rca-monitor:latest
           status=$?
           set -e
           if [ "$status" -eq 124 ]; then
-            echo "55-minute monitoring window complete. Next run starts automatically via cron."
+            echo "55-minute window complete. Next job starts automatically via cron."
             exit 0
           fi
           if [ "$status" -ne 0 ]; then
             echo "Container exited with error code $status"
             exit "$status"
           fi
-
-      - name: Run continuous monitor for bounded time
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'demo' }}
-        env:
-          MONITOR_MINUTES: ${{ github.event.inputs.monitor_minutes || '2' }}
-        run: |
-          set -euo pipefail
-          export RCA_POLL_INTERVAL="${RCA_POLL_INTERVAL:-120}"
-          echo "Using poll interval: ${RCA_POLL_INTERVAL}s"
-          EFFECTIVE_MINUTES=$MONITOR_MINUTES
-          if [ "$EFFECTIVE_MINUTES" -lt 2 ]; then
-            EFFECTIVE_MINUTES=2
-          fi
-          DURATION_SECONDS=$((EFFECTIVE_MINUTES * 60))
-          START_TS=$(date +%s)
-          set +e
-          timeout "${DURATION_SECONDS}s" docker run --rm \
-            -e SPLUNK_API_URL="$SPLUNK_API_URL" \
-            -e SPLUNK_AUTH_TOKEN="$SPLUNK_AUTH_TOKEN" \
-            -e SPLUNK_DETECTOR_ID="$SPLUNK_DETECTOR_ID" \
-            -e WEBEX_BOT_TOKEN="$WEBEX_BOT_TOKEN" \
-            -e WEBEX_ROOM_ID="$WEBEX_ROOM_ID" \
-            -e SMTP_SERVER="$SMTP_SERVER" \
-            -e SMTP_PORT="$SMTP_PORT" \
-            -e SMTP_USER="$SMTP_USER" \
-            -e SMTP_PASSWORD="$SMTP_PASSWORD" \
-            -e EMAIL_FROM="$EMAIL_FROM" \
-            -e EMAIL_TO="$EMAIL_TO" \
-            -e RCA_DEBUG_INCIDENTS="true" \
-            -e RCA_POLL_INTERVAL="${RCA_POLL_INTERVAL:-120}" \
-            rca-monitor:latest
-          status=$?
-          set -e
-          END_TS=$(date +%s)
-          ELAPSED=$((END_TS - START_TS))
-          if [ "$ELAPSED" -lt "$DURATION_SECONDS" ] && [ "$status" -eq 0 ]; then
-            REMAINING=$((DURATION_SECONDS - ELAPSED))
-            echo "Monitor ended early; waiting ${REMAINING}s to satisfy minimum runtime."
-            sleep "$REMAINING"
-          fi
-          if [ "$status" -eq 124 ]; then
-            echo "Monitoring window reached (${EFFECTIVE_MINUTES}m); continuing workflow."
-            exit 0
-          fi
-          if [ "$status" -ne 0 ]; then
-            echo "continuous-rca failed with exit code $status"
-            exit "$status"
-          fi
-
-      - name: Demo detector summary
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'demo' }}
-        run: |
-          {
-            echo "### Demo detector created"
-            echo
-            echo "- Detector ID: $SPLUNK_DETECTOR_ID"
-            echo "- Important: demo mode may create a new detector per run on ephemeral runners."
-            echo "- If you keep resources, update GitHub secret SPLUNK_DETECTOR_ID with this value for monitor mode."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Destroy Terraform resources
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'demo' && github.event.inputs.keep_resources != 'true' }}
-        run: make tf-destroy
-
-      - name: Keep resources note
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'demo' && github.event.inputs.keep_resources == 'true' }}
-        run: |
-          echo "Skipping destroy because keep_resources=true."
-          echo "Update the GitHub Actions secret SPLUNK_DETECTOR_ID with: $SPLUNK_DETECTOR_ID"
