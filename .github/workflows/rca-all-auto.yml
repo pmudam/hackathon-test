@@ -6,7 +6,7 @@ on:
       monitor_minutes:
         description: "How long to run continuous monitoring before stopping"
         required: false
-        default: "10"
+        default: "2"
       keep_resources:
         description: "Keep Terraform resources after run (true/false)"
         required: false
@@ -72,16 +72,30 @@ jobs:
 
       - name: Run continuous monitor for bounded time
         env:
-          MONITOR_MINUTES: ${{ github.event.inputs.monitor_minutes || '10' }}
+          MONITOR_MINUTES: ${{ github.event.inputs.monitor_minutes || '2' }}
         run: |
           set -euo pipefail
-          DURATION_SECONDS=$((MONITOR_MINUTES * 60))
+          export RCA_POLL_INTERVAL="${RCA_POLL_INTERVAL:-120}"
+          echo "Using poll interval: ${RCA_POLL_INTERVAL}s"
+          EFFECTIVE_MINUTES=$MONITOR_MINUTES
+          if [ "$EFFECTIVE_MINUTES" -lt 2 ]; then
+            EFFECTIVE_MINUTES=2
+          fi
+          DURATION_SECONDS=$((EFFECTIVE_MINUTES * 60))
+          START_TS=$(date +%s)
           set +e
           timeout "${DURATION_SECONDS}s" make continuous-rca
           status=$?
           set -e
+          END_TS=$(date +%s)
+          ELAPSED=$((END_TS - START_TS))
+          if [ "$ELAPSED" -lt "$DURATION_SECONDS" ] && [ "$status" -eq 0 ]; then
+            REMAINING=$((DURATION_SECONDS - ELAPSED))
+            echo "Monitor ended early; waiting ${REMAINING}s to satisfy minimum runtime."
+            sleep "$REMAINING"
+          fi
           if [ "$status" -eq 124 ]; then
-            echo "Monitoring window reached (${MONITOR_MINUTES}m); continuing workflow."
+            echo "Monitoring window reached (${EFFECTIVE_MINUTES}m); continuing workflow."
             exit 0
           fi
           if [ "$status" -ne 0 ]; then

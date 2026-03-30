@@ -79,9 +79,9 @@ For `RCA All Auto (Terraform)`, you do **not** need `SPLUNK_DETECTOR_ID` as a se
 ### 3) Notes for all-auto workflow
 
 - `RCA All Auto (Terraform)` provisions a detector, auto-fetches detector ID, and runs `make continuous-rca` for a bounded time
-- You can set `monitor_minutes` when launching the workflow (default: 10)
+- You can set `monitor_minutes` when launching the workflow (default: 2, minimum enforced: 2)
 - You can set `keep_resources=true` to skip destroy for debugging
-- Optional secret: `RCA_POLL_INTERVAL` (defaults to app value if unset)
+- Optional secret: `RCA_POLL_INTERVAL` (defaults to `120` seconds in this workflow if unset)
 
 ### 4) View output
 
