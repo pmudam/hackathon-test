@@ -76,7 +76,18 @@ jobs:
         run: |
           set -euo pipefail
           DURATION_SECONDS=$((MONITOR_MINUTES * 60))
-          timeout "${DURATION_SECONDS}s" make continuous-rca || test "$?" = "124"
+          set +e
+          timeout "${DURATION_SECONDS}s" make continuous-rca
+          status=$?
+          set -e
+          if [ "$status" -eq 124 ]; then
+            echo "Monitoring window reached (${MONITOR_MINUTES}m); continuing workflow."
+            exit 0
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "continuous-rca failed with exit code $status"
+            exit "$status"
+          fi
 
       - name: Destroy Terraform resources
         if: ${{ always() && github.event.inputs.keep_resources != 'true' }}
