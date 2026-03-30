@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from rca_assistant.continuous_rca import format_notification
+from rca_assistant.continuous_rca import format_notification, resolve_poll_interval
 
 
 class ContinuousRcaTests(unittest.TestCase):
@@ -29,6 +29,18 @@ class ContinuousRcaTests(unittest.TestCase):
 
         self.assertIn("**Splunk RCA Update**", message)
         self.assertIn("raw output", message)
+
+    def test_resolve_poll_interval_defaults_on_empty(self):
+        self.assertEqual(resolve_poll_interval(""), 60)
+        self.assertEqual(resolve_poll_interval("   "), 60)
+
+    def test_resolve_poll_interval_defaults_on_invalid(self):
+        self.assertEqual(resolve_poll_interval("abc"), 60)
+        self.assertEqual(resolve_poll_interval("0"), 60)
+        self.assertEqual(resolve_poll_interval("-10"), 60)
+
+    def test_resolve_poll_interval_accepts_positive_integer(self):
+        self.assertEqual(resolve_poll_interval("15"), 15)
 
 
 if __name__ == "__main__":

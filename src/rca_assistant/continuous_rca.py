@@ -8,7 +8,28 @@ import time
 from . import email_notifier
 from .webex_utils import send_webex_message
 
-POLL_INTERVAL = int(os.getenv("RCA_POLL_INTERVAL", "60"))
+DEFAULT_POLL_INTERVAL = 60
+
+
+def resolve_poll_interval(value: str | None = None) -> int:
+    raw_value = value if value is not None else os.getenv("RCA_POLL_INTERVAL", "")
+    normalized = raw_value.strip() if isinstance(raw_value, str) else ""
+
+    if not normalized:
+        return DEFAULT_POLL_INTERVAL
+
+    try:
+        parsed = int(normalized)
+    except (TypeError, ValueError):
+        return DEFAULT_POLL_INTERVAL
+
+    if parsed <= 0:
+        return DEFAULT_POLL_INTERVAL
+
+    return parsed
+
+
+POLL_INTERVAL = resolve_poll_interval()
 
 
 def format_notification(rca_output: str) -> str:
