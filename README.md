@@ -2,7 +2,7 @@
 
 **Your problem:** When a threshold breach fires in Splunk, engineers manually correlate signals and diagnose the issue—slow, error-prone, and inefficient.
 
-**Our solution:** Automated root cause analysis that correlates Splunk detector incidents and dashboard thresholds, identifies the probable root cause, and sends actionable remediation steps to Webex—all in one command.
+**Our solution:** Automated root cause analysis that correlates Splunk detector incidents and dashboard thresholds, identifies the probable root cause, and sends actionable remediation steps to Webex/email—all in one command.
 
 ---
 
@@ -39,6 +39,54 @@ This will:
 ```bash
 make live-rca
 ```
+
+---
+
+## 🤖 Run from GitHub Actions
+
+This repo includes two workflows:
+
+- `.github/workflows/rca.yml` for one-shot RCA (manual + every 30 minutes)
+- `.github/workflows/rca-all-auto.yml` for Terraform provision + continuous monitor + auto-destroy
+
+### 1) Add repository secrets
+
+Go to **GitHub → Settings → Secrets and variables → Actions → New repository secret** and add:
+
+- `SPLUNK_API_URL`
+- `SPLUNK_AUTH_TOKEN`
+- `SPLUNK_DETECTOR_ID`
+
+Optional notification secrets:
+
+- `WEBEX_BOT_TOKEN`
+- `WEBEX_ROOM_ID`
+- `SMTP_SERVER`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASSWORD`
+- `EMAIL_FROM`
+- `EMAIL_TO`
+
+For `RCA All Auto (Terraform)`, you do **not** need `SPLUNK_DETECTOR_ID` as a secret. It is resolved automatically from Terraform output after apply.
+
+### 2) Trigger workflows
+
+- **One-shot RCA:** Open **GitHub → Actions → RCA Monitor** and click **Run workflow**
+- **All-auto (Terraform):** Open **GitHub → Actions → RCA All Auto (Terraform)** and click **Run workflow**
+- Scheduled runs apply only to `RCA Monitor` (every 30 minutes)
+
+### 3) Notes for all-auto workflow
+
+- `RCA All Auto (Terraform)` provisions a detector, auto-fetches detector ID, and runs `make continuous-rca` for a bounded time
+- You can set `monitor_minutes` when launching the workflow (default: 10)
+- You can set `keep_resources=true` to skip destroy for debugging
+- Optional secret: `RCA_POLL_INTERVAL` (defaults to app value if unset)
+
+### 4) View output
+
+- Open the latest run logs under **Actions → RCA Monitor → run-live-rca**
+- If notification secrets are set, results are also posted to Webex and/or email
 
 ---
 
