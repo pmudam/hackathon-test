@@ -1,4 +1,4 @@
-name: RCA All Auto (Terraform)
+name: RCA Demo All Auto (Terraform)
 
 on:
   workflow_dispatch:
@@ -109,4 +109,4 @@ jobs:
 
       - name: Keep resources note
         if: ${{ always() && github.event.inputs.keep_resources == 'true' }}
-        run: echo "Skipping destroy because keep_resources=true"
+        run: echo "Skipping destroy because keep_resources=true. Use this only when you want to keep the demo detector for the scheduled monitor workflow."

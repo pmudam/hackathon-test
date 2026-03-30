@@ -1,9 +1,9 @@
-name: RCA Monitor
+name: RCA Scheduled Monitor
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "*/5 * * * *"
 
 permissions:
   contents: read
@@ -45,5 +45,5 @@ jobs:
           test -n "$SPLUNK_AUTH_TOKEN" || (echo "Missing secret: SPLUNK_AUTH_TOKEN" && exit 1)
           test -n "$SPLUNK_DETECTOR_ID" || (echo "Missing secret: SPLUNK_DETECTOR_ID" && exit 1)
 
-      - name: Run one-shot live RCA
+      - name: Run scheduled live RCA against existing detector
         run: make live-rca

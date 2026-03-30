@@ -46,8 +46,8 @@ make live-rca
 
 This repo includes two workflows:
 
-- `.github/workflows/rca.yml` for one-shot RCA (manual + every 30 minutes)
-- `.github/workflows/rca-all-auto.yml` for Terraform provision + continuous monitor + auto-destroy
+- `.github/workflows/rca.yml` for scheduled RCA polling against an existing detector (manual + every 5 minutes)
+- `.github/workflows/rca-all-auto.yml` for bounded demo runs: provision + short monitor window + optional destroy
 
 ### 1) Add repository secrets
 
@@ -68,24 +68,30 @@ Optional notification secrets:
 - `EMAIL_FROM`
 - `EMAIL_TO`
 
-For `RCA All Auto (Terraform)`, you do **not** need `SPLUNK_DETECTOR_ID` as a secret. It is resolved automatically from Terraform output after apply.
+For `RCA Demo All Auto (Terraform)`, you do **not** need `SPLUNK_DETECTOR_ID` as a secret. It is resolved automatically from Terraform output after apply.
 
 ### 2) Trigger workflows
 
-- **One-shot RCA:** Open **GitHub → Actions → RCA Monitor** and click **Run workflow**
-- **All-auto (Terraform):** Open **GitHub → Actions → RCA All Auto (Terraform)** and click **Run workflow**
-- Scheduled runs apply only to `RCA Monitor` (every 30 minutes)
+- **Scheduled monitor:** Open **GitHub → Actions → RCA Scheduled Monitor** and click **Run workflow**
+- **Demo workflow:** Open **GitHub → Actions → RCA Demo All Auto (Terraform)** and click **Run workflow**
+- Scheduled runs apply only to `RCA Scheduled Monitor` (every 5 minutes)
 
-### 3) Notes for all-auto workflow
+### 3) Recommended setup
 
-- `RCA All Auto (Terraform)` provisions a detector, auto-fetches detector ID, and runs `make continuous-rca` for a bounded time
+- **Provision once:** create the detector once and keep it alive with `make tf-apply` or with the demo workflow using `keep_resources=true`
+- **Monitor continuously:** let `RCA Scheduled Monitor` poll Splunk every 5 minutes using the existing detector id from GitHub secret `SPLUNK_DETECTOR_ID`
+- **Destroy manually:** run `make tf-destroy` only when you really want to stop alert monitoring
+
+### 4) Notes for demo workflow
+
+- `RCA Demo All Auto (Terraform)` provisions a detector, auto-fetches detector ID, and runs `make continuous-rca` for a bounded time
 - You can set `monitor_minutes` when launching the workflow (default: 2, minimum enforced: 2)
 - You can set `keep_resources=true` to skip destroy for debugging
 - Optional secret: `RCA_POLL_INTERVAL` (defaults to `120` seconds in this workflow if unset)
 
-### 4) View output
+### 5) View output
 
-- Open the latest run logs under **Actions → RCA Monitor → run-live-rca**
+- Open the latest run logs under **Actions → RCA Scheduled Monitor → run-live-rca**
 - If notification secrets are set, results are also posted to Webex and/or email
 
 ---
