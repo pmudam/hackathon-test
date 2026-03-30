@@ -175,47 +175,34 @@ jobs:
           test -n "$SPLUNK_AUTH_TOKEN"  || (echo "ERROR: Missing secret SPLUNK_AUTH_TOKEN"  && exit 1)
           # SPLUNK_DETECTOR_ID can be missing — we'll auto-resolve it below
 
-      - name: Auto-resolve detector ID (if not set in secret)
+      - name: Auto-resolve detector ID
         if: ${{ github.event_name == 'schedule' || github.event.inputs.action == 'monitor-only' }}
         run: |
+          set -euo pipefail
+          
           if [ -n "${SPLUNK_DETECTOR_ID:-}" ]; then
-            echo "✅ Using detector from secret: $SPLUNK_DETECTOR_ID"
+            echo "Using detector from GitHub secret"
             exit 0
           fi
           
-          # Try to read detector ID from repo file
-          if [ -f ".detector-id" ]; then
-            DETECTOR_ID=$(cat .detector-id | tr -d ' \n')
-            if [ -n "$DETECTOR_ID" ]; then
-              echo "SPLUNK_DETECTOR_ID=$DETECTOR_ID" >> "$GITHUB_ENV"
-              echo "✅ Found detector ID from repo: $DETECTOR_ID"
-              exit 0
-            fi
-          fi
+          echo "Detector ID not in secret. Querying Splunk..."
           
-          # Last resort: query Splunk by name (for backward compatibility)
-          DETECTOR_NAME="PIAM-PREVIEW:Test DynamoDB Read Capacity"
-          echo "Searching Splunk for detector: $DETECTOR_NAME"
-          
+          # Query all detectors and find by partial name match
           DETECTOR_ID=$(curl -sS \
             -H "Authorization: ${SPLUNK_AUTH_TOKEN}" \
             -H "Content-Type: application/json" \
-            "${SPLUNK_API_URL}/v2/detector?limit=1000" 2>/dev/null | \
-            python3 -c "import json, sys; data=json.load(sys.stdin); result = [d.get('id', '') for d in data.get('results', []) if d.get('name') == '$DETECTOR_NAME']; print(result[0] if result else '')" 2>/dev/null || echo "")
+            "${SPLUNK_API_URL}/v2/detector?limit=1000" | \
+            python3 -c "import json, sys; data = json.load(sys.stdin); detectors = data.get('results', []); ids = [d.get('id') for d in detectors if 'DynamoDB Read Capacity' in d.get('name', '')]; print(ids[0] if ids else '')" 2>/dev/null || echo "")
           
           if [ -n "$DETECTOR_ID" ]; then
             echo "SPLUNK_DETECTOR_ID=$DETECTOR_ID" >> "$GITHUB_ENV"
-            echo "✅ Found detector in Splunk: $DETECTOR_ID"
-            # Save for next time
             echo "$DETECTOR_ID" > .detector-id
-            exit 0
+            echo "Successfully resolved detector: $DETECTOR_ID"
+          else
+            echo "ERROR: Could not find DynamoDB detector in Splunk"
+            echo "Run workflow with action=create-and-monitor to create one"
+            exit 1
           fi
-          
-          echo "❌ ERROR: Could not find detector"
-          echo "Solutions:"
-          echo "  1. Run workflow with action=create-and-monitor to create detector"
-          echo "  2. Set GitHub secret SPLUNK_DETECTOR_ID with the detector ID"
-          exit 1
 
       - name: Preflight — check Splunk API connectivity
         if: ${{ github.event_name == 'schedule' || github.event.inputs.action == 'monitor-only' }}
