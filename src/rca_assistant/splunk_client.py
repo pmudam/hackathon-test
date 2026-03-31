@@ -96,9 +96,10 @@ def incidents_to_alerts(
         )
 
         dimensions = item.get("dimensions") if isinstance(item.get("dimensions"), dict) else {}
+        table_name = str(dimensions.get("TableName") or "").strip() or ""
         service = (
             str(item.get("service") or "").strip()
-            or str(dimensions.get("service") or dimensions.get("service_name") or dimensions.get("TableName") or "").strip()
+            or str(dimensions.get("service") or dimensions.get("service_name") or table_name or "").strip()
             or service_fallback
         )
 
@@ -120,6 +121,7 @@ def incidents_to_alerts(
                     "detector_name": detector_name,
                     "incident_status": item.get("status", "unknown"),
                     "raw_severity": item.get("severity"),
+                    "table_name": table_name,
                     "source": "splunk-live",
                 },
             }

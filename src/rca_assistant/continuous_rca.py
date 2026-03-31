@@ -69,10 +69,14 @@ def format_notification(rca_output: str) -> str:
 
     evidence = "\n".join(f"- {item}" for item in finding.get("evidence", [])) or "- No evidence captured"
     remediation = "\n".join(f"- {item}" for item in finding.get("remediation_steps", [])) or "- No remediation steps available"
+    
+    table_name = finding.get("table_name", "") or ""
+    table_line = f"**Table Name:** {table_name}\n" if table_name else ""
 
     return (
         "**Splunk RCA Update**\n\n"
         f"**Service:** {finding.get('affected_service', 'unknown')}\n"
+        f"{table_line}"
         f"**Probable Cause:** {finding.get('probable_root_cause', 'unknown')}\n"
         f"**Confidence:** {finding.get('confidence', 'unknown')}\n\n"
         f"**Explanation:**\n{finding.get('explanation', 'No explanation available')}\n\n"

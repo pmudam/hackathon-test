@@ -24,6 +24,11 @@ class RootCauseEngine:
             )
 
         affected_service = Counter(alert.service for alert in alerts).most_common(1)[0][0]
+        table_name = ""
+        for alert in alerts:
+            if alert.metadata.get("table_name"):
+                table_name = str(alert.metadata.get("table_name", "")).strip()
+                break
         alerts = sorted(alerts, key=lambda item: item.timestamp)
 
         score = {"deployment": 0.0, "memory": 0.0, "cpu": 0.0, "api_failure": 0.0, "capacity": 0.0}
@@ -71,6 +76,7 @@ class RootCauseEngine:
             explanation=explanation,
             evidence=evidence,
             remediation_steps=remediation_steps,
+            table_name=table_name,
         )
 
     def _normalize(self, splunk_alerts: list[dict]) -> list[Alert]:

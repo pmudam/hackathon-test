@@ -44,3 +44,4 @@ class RootCauseFinding:
     explanation: str
     evidence: list[str]
     remediation_steps: list[str]
+    table_name: str = ""
