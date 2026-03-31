@@ -144,6 +144,8 @@ def main() -> None:
 
     print("\n=== AI Root Cause Assistant ===")
     print(f"Affected service : {finding.affected_service}")
+    if finding.table_name:
+        print(f"Table name       : {finding.table_name}")
     print(f"Probable cause   : {finding.probable_root_cause}")
     print(f"Confidence       : {finding.confidence}")
     print(f"\nExplanation:\n- {finding.explanation}")
