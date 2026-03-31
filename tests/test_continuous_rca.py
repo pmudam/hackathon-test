@@ -1,7 +1,14 @@
 import json
 import unittest
 
-from rca_assistant.continuous_rca import format_notification, idle_logging_enabled, is_no_alert_result, resolve_poll_interval
+from rca_assistant.continuous_rca import (
+    format_notification,
+    idle_logging_enabled,
+    is_no_alert_result,
+    notification_fingerprint,
+    resolve_poll_interval,
+    should_send_notification,
+)
 
 
 class ContinuousRcaTests(unittest.TestCase):
@@ -80,6 +87,68 @@ class ContinuousRcaTests(unittest.TestCase):
         )
 
         self.assertFalse(is_no_alert_result(payload))
+
+    def test_notification_fingerprint_stable_for_equivalent_json(self):
+        payload_one = json.dumps(
+            {
+                "affected_service": "orders-api",
+                "probable_root_cause": "High latency",
+                "confidence": 0.92,
+                "explanation": "Dependency saturation.",
+                "evidence": ["p95 latency high"],
+                "remediation_steps": ["Scale service"],
+            }
+        )
+        payload_two = json.dumps(
+            {
+                "remediation_steps": ["Scale service"],
+                "evidence": ["p95 latency high"],
+                "explanation": "Dependency saturation.",
+                "confidence": 0.92,
+                "probable_root_cause": "High latency",
+                "affected_service": "orders-api",
+            }
+        )
+
+        self.assertEqual(notification_fingerprint(payload_one), notification_fingerprint(payload_two))
+
+    def test_should_send_notification_false_for_duplicate_fingerprint(self):
+        payload = json.dumps(
+            {
+                "affected_service": "orders-api",
+                "probable_root_cause": "High latency",
+                "confidence": 0.92,
+                "explanation": "Dependency saturation.",
+                "evidence": ["p95 latency high"],
+                "remediation_steps": ["Scale service"],
+            }
+        )
+
+        first_should_send, fingerprint = should_send_notification(payload, None)
+        second_should_send, _ = should_send_notification(payload, fingerprint)
+
+        self.assertTrue(first_should_send)
+        self.assertFalse(second_should_send)
+
+    def test_should_send_notification_true_after_reset(self):
+        payload = json.dumps(
+            {
+                "affected_service": "orders-api",
+                "probable_root_cause": "High latency",
+                "confidence": 0.92,
+                "explanation": "Dependency saturation.",
+                "evidence": ["p95 latency high"],
+                "remediation_steps": ["Scale service"],
+            }
+        )
+
+        first_should_send, fingerprint = should_send_notification(payload, None)
+        duplicate_should_send, _ = should_send_notification(payload, fingerprint)
+        reset_should_send, _ = should_send_notification(payload, None)
+
+        self.assertTrue(first_should_send)
+        self.assertFalse(duplicate_should_send)
+        self.assertTrue(reset_should_send)
 
 
 if __name__ == "__main__":
