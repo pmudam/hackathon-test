@@ -10,7 +10,7 @@ from email.mime.text import MIMEText
 def send_email_notification(rca_output: str) -> None:
     """Send RCA result via email."""
     smtp_server = os.getenv("SMTP_SERVER", "").strip()
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_port_str = os.getenv("SMTP_PORT", "587").strip()
     smtp_user = os.getenv("SMTP_USER", "").strip()
     smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
     email_from = os.getenv("EMAIL_FROM", smtp_user or "rca-bot@example.com").strip()
@@ -20,6 +20,11 @@ def send_email_notification(rca_output: str) -> None:
         raise ValueError("Set EMAIL_TO to enable email notifications")
     if not smtp_server:
         raise ValueError("Set SMTP_SERVER to enable email notifications")
+
+    try:
+        smtp_port = int(smtp_port_str) if smtp_port_str else 587
+    except ValueError:
+        raise ValueError(f"SMTP_PORT must be a valid integer, got: {smtp_port_str}")
 
     # Parse RCA output for subject and body
     try:
