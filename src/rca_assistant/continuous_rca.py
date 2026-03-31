@@ -88,13 +88,11 @@ def format_notification(rca_output: str) -> str:
 def notification_fingerprint(rca_output: str) -> str:
     finding = parse_finding(rca_output)
     if finding:
+        # Only fingerprint core identifying fields to avoid false positives
+        # from minor changes in evidence order, confidence rounding, etc.
         stable_payload = {
             "affected_service": finding.get("affected_service", ""),
             "probable_root_cause": finding.get("probable_root_cause", ""),
-            "confidence": finding.get("confidence", ""),
-            "explanation": finding.get("explanation", ""),
-            "evidence": finding.get("evidence", []),
-            "remediation_steps": finding.get("remediation_steps", []),
         }
         serialized = json.dumps(stable_payload, sort_keys=True)
     else:
