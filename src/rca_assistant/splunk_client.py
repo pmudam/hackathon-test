@@ -106,13 +106,27 @@ def incidents_to_alerts(
 
         dimensions = item.get("dimensions") if isinstance(item.get("dimensions"), dict) else {}
         
-        # Try multiple paths to extract TableName
+        # Try multiple paths to extract TableName from Splunk incident structure
         table_name = (
             str(dimensions.get("TableName") or "").strip()
             or str(dimensions.get("table_name") or "").strip()
             or str(item.get("TableName") or "").strip()
+            or str(item.get("table_name") or "").strip()
+            or str(item.get("anomalies", {}).get("TableName") or "").strip() if isinstance(item.get("anomalies"), dict) else ""
             or ""
         )
+        
+        # Fallback: try to extract from events or inputs if present
+        if not table_name and isinstance(item.get("events"), list) and item.get("events"):
+            first_event = item["events"][0]
+            if isinstance(first_event, dict):
+                table_name = str(first_event.get("TableName") or "").strip() or ""
+        
+        if debug_incidents_enabled() and item == incidents[0]:
+            print(f"[splunk_client] DEBUG: Extracted table_name='{table_name}' from incident", flush=True)
+            if not table_name:
+                print(f"[splunk_client] DEBUG: dimensions keys: {list(dimensions.keys())}", flush=True)
+                print(f"[splunk_client] DEBUG: item keys: {list(item.keys())}", flush=True)
         
         service = (
             str(item.get("service") or "").strip()
