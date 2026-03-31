@@ -2,6 +2,9 @@ import json
 import unittest
 
 from rca_assistant.continuous_rca import (
+    _clear_fingerprint,
+    _load_fingerprint,
+    _save_fingerprint,
     format_notification,
     idle_logging_enabled,
     is_no_alert_result,
@@ -149,6 +152,14 @@ class ContinuousRcaTests(unittest.TestCase):
         self.assertTrue(first_should_send)
         self.assertFalse(duplicate_should_send)
         self.assertTrue(reset_should_send)
+
+    def test_file_fingerprint_roundtrip(self):
+        _clear_fingerprint()
+        self.assertIsNone(_load_fingerprint())
+        _save_fingerprint("abc123")
+        self.assertEqual(_load_fingerprint(), "abc123")
+        _clear_fingerprint()
+        self.assertIsNone(_load_fingerprint())
 
 
 if __name__ == "__main__":

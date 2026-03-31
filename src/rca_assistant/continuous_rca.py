@@ -5,11 +5,13 @@ import os
 import subprocess
 import time
 from hashlib import sha256
+from pathlib import Path
 
 from . import email_notifier
 from .webex_utils import send_webex_message
 
 DEFAULT_POLL_INTERVAL = 60
+_FINGERPRINT_FILE = Path(os.getenv("RCA_STATE_DIR", "/tmp")) / "rca_last_fingerprint.txt"
 
 
 def resolve_poll_interval(value: str | None = None) -> int:
@@ -31,7 +33,28 @@ def resolve_poll_interval(value: str | None = None) -> int:
 
 
 POLL_INTERVAL = resolve_poll_interval()
-LAST_NOTIFICATION_FINGERPRINT: str | None = None
+
+
+def _load_fingerprint() -> str | None:
+    try:
+        text = _FINGERPRINT_FILE.read_text().strip()
+        return text if text else None
+    except OSError:
+        return None
+
+
+def _save_fingerprint(fingerprint: str) -> None:
+    try:
+        _FINGERPRINT_FILE.write_text(fingerprint)
+    except OSError:
+        pass
+
+
+def _clear_fingerprint() -> None:
+    try:
+        _FINGERPRINT_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def idle_logging_enabled(value: str | None = None) -> bool:
@@ -107,8 +130,6 @@ def should_send_notification(rca_output: str, previous_fingerprint: str | None) 
 
 
 def run_rca_once() -> None:
-    global LAST_NOTIFICATION_FINGERPRINT
-
     env = os.environ.copy()
     command = [
         "python3",
@@ -129,20 +150,21 @@ def run_rca_once() -> None:
         return
 
     if is_no_alert_result(result.stdout, result.stderr):
-        LAST_NOTIFICATION_FINGERPRINT = None
+        # Incidents fully resolved — clear fingerprint so next real incident notifies
+        _clear_fingerprint()
         if idle_logging_enabled():
             if result.stderr:
                 print(result.stderr)
             print("[continuous_rca] No alerts found for the detector in this polling cycle.")
         return
 
-    should_send, current_fingerprint = should_send_notification(result.stdout, LAST_NOTIFICATION_FINGERPRINT)
+    should_send, current_fingerprint = should_send_notification(result.stdout, _load_fingerprint())
     if not should_send:
         if idle_logging_enabled():
-            print("[continuous_rca] Duplicate active incident fingerprint; skipping repeat notifications.")
+            print("[continuous_rca] Same active incident — skipping repeat notification.")
         return
 
-    LAST_NOTIFICATION_FINGERPRINT = current_fingerprint
+    _save_fingerprint(current_fingerprint)
 
     print("\n[continuous_rca] Incident detected. Running RCA analysis...")
     if result.stdout:
