@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -9,6 +10,11 @@ from urllib.request import Request, urlopen
 
 
 MIN_INCIDENT_AGE_SECONDS = 120
+
+
+def debug_incidents_enabled(value: str | None = None) -> bool:
+    raw_value = value if value is not None else os.getenv("RCA_DEBUG_INCIDENTS", "")
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 class SplunkObservabilityClient:
@@ -82,6 +88,9 @@ def incidents_to_alerts(
     alerts: list[dict[str, Any]] = []
     current_time = datetime.now(timezone.utc)
 
+    if debug_incidents_enabled() and incidents:
+        print(f"[splunk_client] DEBUG: First incident structure:\n{json.dumps(incidents[0], indent=2)}", flush=True)
+
     for item in incidents:
         if not _incident_has_matured(item, now=current_time):
             continue
@@ -96,7 +105,15 @@ def incidents_to_alerts(
         )
 
         dimensions = item.get("dimensions") if isinstance(item.get("dimensions"), dict) else {}
-        table_name = str(dimensions.get("TableName") or "").strip() or ""
+        
+        # Try multiple paths to extract TableName
+        table_name = (
+            str(dimensions.get("TableName") or "").strip()
+            or str(dimensions.get("table_name") or "").strip()
+            or str(item.get("TableName") or "").strip()
+            or ""
+        )
+        
         service = (
             str(item.get("service") or "").strip()
             or str(dimensions.get("service") or dimensions.get("service_name") or table_name or "").strip()
